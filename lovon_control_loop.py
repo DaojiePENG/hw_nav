@@ -11,7 +11,7 @@ import sys
 from lovon.lovon_agent import LovonAgent
 
 # Rosmaster 控制
-from Rosmaster_Lib import Rosmaster
+from rosmaster_lib import Rosmaster
 
 # 使用你已有的 Rosmaster_Camera（如果可用）
 try:

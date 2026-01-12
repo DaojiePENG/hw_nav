@@ -5,3 +5,7 @@ __pycache__/
 .vscode/
 build/
 lib/
+
+ros2_x3_ws/build/
+ros2_x3_ws/install/
+ros2_x3_ws/log/

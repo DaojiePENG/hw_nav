@@ -32,7 +32,7 @@ print("Initializing LOVON Agent...")
 lovon_agent = LovonAgent(wh_scale_factor=1.2, velocity_scale=1.2)  # 可根据需要调整缩放因子，避免机器人碰撞
 
 print("Initializing Rosmaster bot...")
-bot = Rosmaster()
+bot = Rosmaster(com="/dev/ttyUSB1")
 bot.create_receive_threading()
 bot.set_auto_report_state(enable=True, forever=False)
 

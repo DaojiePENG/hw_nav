@@ -1,0 +1,7 @@
+lovon/yolo-models/*
+lovon/models_cxn_025/
+lovon.egg*
+__pycache__/
+.vscode/
+build/
+lib/

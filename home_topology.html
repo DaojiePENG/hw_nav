@@ -1,0 +1,155 @@
+<html>
+    <head>
+        <meta charset="utf-8">
+        
+            <script src="lib/bindings/utils.js"></script>
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/dist/vis-network.min.css" integrity="sha512-WgxfT5LWjfszlPHXRmBWHkV2eceiWTOBvrKCNbdgDYTHrT2AeLCGbF4sZlZw3UMN3WtL0tGUoIAKsu8mllg/XA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/vis-network.min.js" integrity="sha512-LnvoEWDFrqGHlHmDD2101OrLcbsfkrzoSpvtSQtxK3RMnRV0eOkhhBN2dXHKRrUU8p2DGRTk35n4O8nWSVe1mQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+            
+        
+<center>
+<h1></h1>
+</center>
+
+<!-- <link rel="stylesheet" href="../node_modules/vis/dist/vis.min.css" type="text/css" />
+<script type="text/javascript" src="../node_modules/vis/dist/vis.js"> </script>-->
+        <link
+          href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/css/bootstrap.min.css"
+          rel="stylesheet"
+          integrity="sha384-eOJMYsd53ii+scO/bJGFsiCZc+5NDVN2yr8+0RDqr0Ql0h+rP48ckxlpbzKgwra6"
+          crossorigin="anonymous"
+        />
+        <script
+          src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/js/bootstrap.bundle.min.js"
+          integrity="sha384-JEW9xMcG8R+pH31jmWH6WWP0WintQrMb4s7ZOdauHnUtxwoG2vI5DkLtS3qm9Ekf"
+          crossorigin="anonymous"
+        ></script>
+
+
+        <center>
+          <h1></h1>
+        </center>
+        <style type="text/css">
+
+             #mynetwork {
+                 width: 100%;
+                 height: 800px;
+                 background-color: #ffffff;
+                 border: 1px solid lightgray;
+                 position: relative;
+                 float: left;
+             }
+
+             
+
+             
+
+             
+        </style>
+    </head>
+
+
+    <body>
+        <div class="card" style="width: 100%">
+            
+            
+            <div id="mynetwork" class="card-body"></div>
+        </div>
+
+        
+        
+
+        <script type="text/javascript">
+
+              // initialize global variables.
+              var edges;
+              var nodes;
+              var allNodes;
+              var allEdges;
+              var nodeColors;
+              var originalNodes;
+              var network;
+              var container;
+              var options, data;
+              var filter = {
+                  item : '',
+                  property : '',
+                  value : []
+              };
+
+              
+
+              
+
+              // This method is responsible for drawing the graph, returns the drawn network
+              function drawGraph() {
+                  var container = document.getElementById('mynetwork');
+
+                  
+
+                  // parsing and collecting nodes and edges from the python
+                  nodes = new vis.DataSet([{"color": "#FFA500", "font": {"color": "black"}, "id": "home_001_living_room_pose_01", "label": "LIV-01", "shape": "dot", "size": 25, "title": "\n            \u003cb\u003eNode ID:\u003c/b\u003e home_001_living_room_pose_01\u003cbr\u003e\n            \u003cb\u003eArea:\u003c/b\u003e \u5ba2\u5385\u003cbr\u003e\n            \u003cb\u003eRoom ID:\u003c/b\u003e living_room\u003cbr\u003e\n            \u003cb\u003ePosition:\u003c/b\u003e (3.50, 3.50)\u003cbr\u003e\n            \u003cb\u003eOrientation:\u003c/b\u003e 0.00 rad\u003cbr\u003e\n            \u003cb\u003eNavigable:\u003c/b\u003e Yes\u003cbr\u003e\n            \u003cb\u003eViewed Objects:\u003c/b\u003e \u6c99\u53d1, \u7535\u89c6, \u8336\u51e0\n            "}, {"color": "#FFA500", "font": {"color": "black"}, "id": "home_001_living_room_pose_02", "label": "LIV-02", "shape": "dot", "size": 25, "title": "\n            \u003cb\u003eNode ID:\u003c/b\u003e home_001_living_room_pose_02\u003cbr\u003e\n            \u003cb\u003eArea:\u003c/b\u003e \u5ba2\u5385\u003cbr\u003e\n            \u003cb\u003eRoom ID:\u003c/b\u003e living_room\u003cbr\u003e\n            \u003cb\u003ePosition:\u003c/b\u003e (5.00, 3.50)\u003cbr\u003e\n            \u003cb\u003eOrientation:\u003c/b\u003e 0.00 rad\u003cbr\u003e\n            \u003cb\u003eNavigable:\u003c/b\u003e Yes\u003cbr\u003e\n            \u003cb\u003eViewed Objects:\u003c/b\u003e \u7535\u89c6\u67dc, \u5730\u6bef\n            "}, {"color": "#FFA500", "font": {"color": "black"}, "id": "home_001_living_room_pose_03", "label": "LIV-03", "shape": "dot", "size": 25, "title": "\n            \u003cb\u003eNode ID:\u003c/b\u003e home_001_living_room_pose_03\u003cbr\u003e\n            \u003cb\u003eArea:\u003c/b\u003e \u5ba2\u5385\u003cbr\u003e\n            \u003cb\u003eRoom ID:\u003c/b\u003e living_room\u003cbr\u003e\n            \u003cb\u003ePosition:\u003c/b\u003e (4.00, 2.00)\u003cbr\u003e\n            \u003cb\u003eOrientation:\u003c/b\u003e 0.00 rad\u003cbr\u003e\n            \u003cb\u003eNavigable:\u003c/b\u003e Yes\u003cbr\u003e\n            \u003cb\u003eViewed Objects:\u003c/b\u003e \u843d\u5730\u706f, \u690d\u7269\n            "}, {"color": "#90EE90", "font": {"color": "black"}, "id": "home_001_dining_room_pose_01", "label": "DIN-01", "shape": "dot", "size": 25, "title": "\n            \u003cb\u003eNode ID:\u003c/b\u003e home_001_dining_room_pose_01\u003cbr\u003e\n            \u003cb\u003eArea:\u003c/b\u003e \u9910\u5385\u003cbr\u003e\n            \u003cb\u003eRoom ID:\u003c/b\u003e dining_room\u003cbr\u003e\n            \u003cb\u003ePosition:\u003c/b\u003e (6.50, 3.50)\u003cbr\u003e\n            \u003cb\u003eOrientation:\u003c/b\u003e 0.00 rad\u003cbr\u003e\n            \u003cb\u003eNavigable:\u003c/b\u003e Yes\u003cbr\u003e\n            \u003cb\u003eViewed Objects:\u003c/b\u003e \u9910\u684c, \u6905\u5b50\n            "}, {"color": "#FFFF00", "font": {"color": "black"}, "id": "home_001_kitchen_pose_01", "label": "KIT-01", "shape": "dot", "size": 25, "title": "\n            \u003cb\u003eNode ID:\u003c/b\u003e home_001_kitchen_pose_01\u003cbr\u003e\n            \u003cb\u003eArea:\u003c/b\u003e \u53a8\u623f\u003cbr\u003e\n            \u003cb\u003eRoom ID:\u003c/b\u003e kitchen\u003cbr\u003e\n            \u003cb\u003ePosition:\u003c/b\u003e (7.50, 4.50)\u003cbr\u003e\n            \u003cb\u003eOrientation:\u003c/b\u003e 0.00 rad\u003cbr\u003e\n            \u003cb\u003eNavigable:\u003c/b\u003e Yes\u003cbr\u003e\n            \u003cb\u003eViewed Objects:\u003c/b\u003e \u7076\u53f0, \u51b0\u7bb1, \u6c34\u69fd\n            "}, {"color": "#800080", "font": {"color": "black"}, "id": "home_001_master_bedroom_pose_01", "label": "MAS-01", "shape": "dot", "size": 25, "title": "\n            \u003cb\u003eNode ID:\u003c/b\u003e home_001_master_bedroom_pose_01\u003cbr\u003e\n            \u003cb\u003eArea:\u003c/b\u003e \u4e3b\u5367\u003cbr\u003e\n            \u003cb\u003eRoom ID:\u003c/b\u003e master_bedroom\u003cbr\u003e\n            \u003cb\u003ePosition:\u003c/b\u003e (2.50, 1.50)\u003cbr\u003e\n            \u003cb\u003eOrientation:\u003c/b\u003e 0.00 rad\u003cbr\u003e\n            \u003cb\u003eNavigable:\u003c/b\u003e Yes\u003cbr\u003e\n            \u003cb\u003eViewed Objects:\u003c/b\u003e \u5e8a, \u8863\u67dc, \u5e8a\u5934\u67dc\n            "}, {"color": "#FFC0CB", "font": {"color": "black"}, "id": "home_001_secondary_bedroom_pose_01", "label": "SEC-01", "shape": "dot", "size": 25, "title": "\n            \u003cb\u003eNode ID:\u003c/b\u003e home_001_secondary_bedroom_pose_01\u003cbr\u003e\n            \u003cb\u003eArea:\u003c/b\u003e \u6b21\u5367\u003cbr\u003e\n            \u003cb\u003eRoom ID:\u003c/b\u003e secondary_bedroom\u003cbr\u003e\n            \u003cb\u003ePosition:\u003c/b\u003e (1.00, 4.00)\u003cbr\u003e\n            \u003cb\u003eOrientation:\u003c/b\u003e 0.00 rad\u003cbr\u003e\n            \u003cb\u003eNavigable:\u003c/b\u003e Yes\u003cbr\u003e\n            \u003cb\u003eViewed Objects:\u003c/b\u003e \u5e8a, \u4e66\u684c\n            "}, {"color": "#ADD8E6", "font": {"color": "black"}, "id": "home_001_children_room_pose_01", "label": "CHI-01", "shape": "dot", "size": 25, "title": "\n            \u003cb\u003eNode ID:\u003c/b\u003e home_001_children_room_pose_01\u003cbr\u003e\n            \u003cb\u003eArea:\u003c/b\u003e \u513f\u7ae5\u623f\u003cbr\u003e\n            \u003cb\u003eRoom ID:\u003c/b\u003e children_room\u003cbr\u003e\n            \u003cb\u003ePosition:\u003c/b\u003e (3.00, 1.00)\u003cbr\u003e\n            \u003cb\u003eOrientation:\u003c/b\u003e 0.00 rad\u003cbr\u003e\n            \u003cb\u003eNavigable:\u003c/b\u003e Yes\u003cbr\u003e\n            \u003cb\u003eViewed Objects:\u003c/b\u003e \u5c0f\u5e8a, \u73a9\u5177\u67b6\n            "}, {"color": "#808080", "font": {"color": "black"}, "id": "home_001_study_pose_01", "label": "STU-01", "shape": "dot", "size": 25, "title": "\n            \u003cb\u003eNode ID:\u003c/b\u003e home_001_study_pose_01\u003cbr\u003e\n            \u003cb\u003eArea:\u003c/b\u003e \u4e66\u623f\u003cbr\u003e\n            \u003cb\u003eRoom ID:\u003c/b\u003e study\u003cbr\u003e\n            \u003cb\u003ePosition:\u003c/b\u003e (2.00, 0.50)\u003cbr\u003e\n            \u003cb\u003eOrientation:\u003c/b\u003e 0.00 rad\u003cbr\u003e\n            \u003cb\u003eNavigable:\u003c/b\u003e Yes\u003cbr\u003e\n            \u003cb\u003eViewed Objects:\u003c/b\u003e \u4e66\u684c, \u4e66\u67b6, \u6905\u5b50\n            "}, {"color": "#00FFFF", "font": {"color": "black"}, "id": "home_001_bathroom1_pose_01", "label": "BATH1-01", "shape": "dot", "size": 25, "title": "\n            \u003cb\u003eNode ID:\u003c/b\u003e home_001_bathroom1_pose_01\u003cbr\u003e\n            \u003cb\u003eArea:\u003c/b\u003e \u536b\u751f\u95f4\u003cbr\u003e\n            \u003cb\u003eRoom ID:\u003c/b\u003e bathroom1\u003cbr\u003e\n            \u003cb\u003ePosition:\u003c/b\u003e (0.50, 2.00)\u003cbr\u003e\n            \u003cb\u003eOrientation:\u003c/b\u003e 0.00 rad\u003cbr\u003e\n            \u003cb\u003eNavigable:\u003c/b\u003e Yes\u003cbr\u003e\n            \u003cb\u003eViewed Objects:\u003c/b\u003e \u9a6c\u6876, \u6d17\u624b\u6c60, \u6dcb\u6d74\n            "}, {"color": "#00FFFF", "font": {"color": "black"}, "id": "home_001_bathroom2_pose_01", "label": "BATH2-01", "shape": "dot", "size": 25, "title": "\n            \u003cb\u003eNode ID:\u003c/b\u003e home_001_bathroom2_pose_01\u003cbr\u003e\n            \u003cb\u003eArea:\u003c/b\u003e \u536b\u751f\u95f4\u003cbr\u003e\n            \u003cb\u003eRoom ID:\u003c/b\u003e bathroom2\u003cbr\u003e\n            \u003cb\u003ePosition:\u003c/b\u003e (1.50, 5.00)\u003cbr\u003e\n            \u003cb\u003eOrientation:\u003c/b\u003e 0.00 rad\u003cbr\u003e\n            \u003cb\u003eNavigable:\u003c/b\u003e Yes\u003cbr\u003e\n            \u003cb\u003eViewed Objects:\u003c/b\u003e \u9a6c\u6876, \u6d17\u624b\u6c60\n            "}, {"color": "#F08080", "font": {"color": "black"}, "id": "home_001_balcony1_pose_01", "label": "BAL1-01", "shape": "dot", "size": 25, "title": "\n            \u003cb\u003eNode ID:\u003c/b\u003e home_001_balcony1_pose_01\u003cbr\u003e\n            \u003cb\u003eArea:\u003c/b\u003e \u9633\u53f0\u003cbr\u003e\n            \u003cb\u003eRoom ID:\u003c/b\u003e balcony1\u003cbr\u003e\n            \u003cb\u003ePosition:\u003c/b\u003e (8.00, 5.00)\u003cbr\u003e\n            \u003cb\u003eOrientation:\u003c/b\u003e 0.00 rad\u003cbr\u003e\n            \u003cb\u003eNavigable:\u003c/b\u003e Yes\u003cbr\u003e\n            \u003cb\u003eViewed Objects:\u003c/b\u003e \u6d17\u8863\u673a, \u82b1\u76c6\n            "}, {"color": "#F08080", "font": {"color": "black"}, "id": "home_001_balcony2_pose_01", "label": "BAL2-01", "shape": "dot", "size": 25, "title": "\n            \u003cb\u003eNode ID:\u003c/b\u003e home_001_balcony2_pose_01\u003cbr\u003e\n            \u003cb\u003eArea:\u003c/b\u003e \u9633\u53f0\u003cbr\u003e\n            \u003cb\u003eRoom ID:\u003c/b\u003e balcony2\u003cbr\u003e\n            \u003cb\u003ePosition:\u003c/b\u003e (3.50, 0.00)\u003cbr\u003e\n            \u003cb\u003eOrientation:\u003c/b\u003e 0.00 rad\u003cbr\u003e\n            \u003cb\u003eNavigable:\u003c/b\u003e Yes\u003cbr\u003e\n            \u003cb\u003eViewed Objects:\u003c/b\u003e \u4f11\u95f2\u6905, \u7eff\u690d\n            "}]);
+                  edges = new vis.DataSet([{"from": "home_001_living_room_pose_01", "title": "2.24m", "to": "home_001_master_bedroom_pose_01", "width": 2}, {"from": "home_001_living_room_pose_01", "title": "2.55m", "to": "home_001_secondary_bedroom_pose_01", "width": 2}, {"from": "home_001_living_room_pose_01", "title": "2.55m", "to": "home_001_children_room_pose_01", "width": 2}, {"from": "home_001_living_room_pose_01", "title": "3.35m", "to": "home_001_study_pose_01", "width": 2}, {"from": "home_001_living_room_pose_01", "title": "3.35m", "to": "home_001_bathroom1_pose_01", "width": 2}, {"from": "home_001_living_room_pose_01", "title": "2.50m", "to": "home_001_bathroom2_pose_01", "width": 2}, {"from": "home_001_living_room_pose_02", "title": "1.50m", "to": "home_001_dining_room_pose_01", "width": 2}, {"from": "home_001_living_room_pose_02", "title": "3.35m", "to": "home_001_balcony1_pose_01", "width": 2}, {"from": "home_001_living_room_pose_03", "title": "2.06m", "to": "home_001_balcony2_pose_01", "width": 2}, {"from": "home_001_dining_room_pose_01", "title": "1.41m", "to": "home_001_kitchen_pose_01", "width": 2}, {"from": "home_001_master_bedroom_pose_01", "title": "1.12m", "to": "home_001_study_pose_01", "width": 2}]);
+
+                  nodeColors = {};
+                  allNodes = nodes.get({ returnType: "Object" });
+                  for (nodeId in allNodes) {
+                    nodeColors[nodeId] = allNodes[nodeId].color;
+                  }
+                  allEdges = edges.get({ returnType: "Object" });
+                  // adding nodes and edges to the graph
+                  data = {nodes: nodes, edges: edges};
+
+                  var options = {
+    "configure": {
+        "enabled": false
+    },
+    "edges": {
+        "color": {
+            "inherit": true
+        },
+        "smooth": {
+            "enabled": true,
+            "type": "dynamic"
+        }
+    },
+    "interaction": {
+        "dragNodes": true,
+        "hideEdgesOnDrag": false,
+        "hideNodesOnDrag": false
+    },
+    "physics": {
+        "enabled": true,
+        "stabilization": {
+            "enabled": true,
+            "fit": true,
+            "iterations": 1000,
+            "onlyDynamicEdges": false,
+            "updateInterval": 50
+        }
+    }
+};
+
+                  
+
+
+                  
+
+                  network = new vis.Network(container, data, options);
+
+                  
+
+                  
+
+                  
+
+
+                  
+
+                  return network;
+
+              }
+              drawGraph();
+        </script>
+    </body>
+</html>

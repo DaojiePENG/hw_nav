@@ -61,12 +61,12 @@ def generate_launch_description():
             '/sllidar_s2_launch.py']),
         condition=LaunchConfigurationEquals('rplidar_type', 's2')
     )
-    lidar_4ROS_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            [os.path.join(get_package_share_directory('ydlidar_ros2_driver'), 'launch'),
-            '/ydlidar_raw_launch.py']),
-        condition=LaunchConfigurationEquals('rplidar_type', '4ROS')
-    )
+    # lidar_4ROS_launch = IncludeLaunchDescription(
+    #     PythonLaunchDescriptionSource(
+    #         [os.path.join(get_package_share_directory('ydlidar_ros2_driver'), 'launch'),
+    #         '/ydlidar_raw_launch.py']),
+    #     condition=LaunchConfigurationEquals('rplidar_type', '4ROS')
+    # )
 
     if rplidar_type == '4ROS':
         tf_base_link_to_laser = Node(
@@ -89,7 +89,7 @@ def generate_launch_description():
         bringup_r2_launch,
         lidar_a1_launch,
         lidar_s2_launch,
-        lidar_4ROS_launch,
+        # lidar_4ROS_launch,
         tf_base_link_to_laser
 
     ])

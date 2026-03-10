@@ -75,13 +75,13 @@ def generate_launch_description():
         'approx_sync': True,           # Gemini 336L 支持硬件同步
         'wait_imu_to_init': False,      # 未使用IMU
         'Odom/FeatureType': 'SURF',    # 可替换为 ORB/SIFT/AKAZE
-        'Odom/MaxFeatures': 1000,      # 特征点数量
+        'Odom/MaxFeatures': 2000,      # 特征点数量
         'Odom/MinInliers': 10,         # 最小内点要求
         'Vis/EstimationType': '0',     # 视觉里程计模式
         'qos_image': 2,                # Best effort（匹配相机驱动默认QoS）
         'qos_camera_info': 2,
         'qos_scan': 2,
-        'approx_sync_max_interval': 0.01,  # 同步最大时间差（10ms）
+        'approx_sync_max_interval': 0.0005,  # 同步最大时间差（10ms）
     }]
 
     # -------------------------- 5. 话题重映射（匹配相机输出） --------------------------

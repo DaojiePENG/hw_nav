@@ -25,6 +25,7 @@ def generate_launch_description():
           'qos_image':qos,
           'qos_imu':qos,
           # RTAB-Map's parameters should be strings:
+          'Vis/EstimationType': '0',     # 视觉里程计模式
           'Reg/Strategy':'1',
           'Reg/Force3DoF':'true',
           'RGBD/NeighborLinkRefining':'True',
@@ -36,8 +37,17 @@ def generate_launch_description():
           ('rgb/image', '/camera/color/image_raw'),
           ('rgb/camera_info', '/camera/color/camera_info'),
           ('depth/image', '/camera/depth/image_raw'),
-          ('odom', '/odom')
+        #   ('odom', '/odom')
         ]
+    # 视觉里程计节点
+    rgbd_odometry_node = Node(
+        package='rtabmap_odom',
+        executable='rgbd_odometry',
+        output='screen',
+        parameters=[parameters],
+        remappings=remappings,
+        arguments=['--ros-args', '--log-level', 'info'],
+    )
 
     return LaunchDescription([
 
@@ -82,6 +92,7 @@ def generate_launch_description():
               {'Mem/IncrementalMemory':'False',
                'Mem/InitWMWithAllNodes':'True'}],
             remappings=remappings),
+        rgbd_odometry_node,
 
         # Node(
         #     package='rtabmap_viz', executable='rtabmap_viz', output='screen',

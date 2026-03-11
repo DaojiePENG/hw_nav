@@ -15,7 +15,7 @@ import threading
 import time
 
 class YahboomX3Controller(Node):
-    """亚博X3小车导航控制类（终极稳定版：修复所有已知问题）"""
+    """亚博X3小车导航控制类（终极稳定版：修复姿态获取为0的问题）"""
     def __init__(self, node_name="x3_nav_controller"):
         super().__init__(node_name)
         
@@ -54,6 +54,15 @@ class YahboomX3Controller(Node):
             self.get_logger().warn("Nav2服务器未响应，仅能使用话题方式发送目标点")
             self.nav_action_client = None
 
+        # 新增：spin线程（自动启动，确保回调执行）
+        self.spin_thread = threading.Thread(target=self._spin_loop, daemon=True)
+        self.spin_thread.start()
+
+    def _spin_loop(self):
+        """内部spin循环，驱动回调执行"""
+        while rclpy.ok():
+            rclpy.spin_once(self, timeout_sec=0.1)  # 非阻塞spin，每0.1秒检查一次
+
     def quaternion_to_yaw(self, quaternion):
         """ROS2原生实现：四元数转偏航角（yaw）"""
         x = quaternion.x
@@ -89,6 +98,8 @@ class YahboomX3Controller(Node):
     def odom_callback(self, msg: Odometry):
         """里程计话题回调，更新实时姿态"""
         with self.lock:
+            # 新增日志：验证回调是否执行
+            self.get_logger().debug(f"收到里程计数据：x={msg.pose.pose.position.x:.2f}, y={msg.pose.pose.position.y:.2f}")
             self.current_odom_pose["x"] = msg.pose.pose.position.x
             self.current_odom_pose["y"] = msg.pose.pose.position.y
             self.current_odom_pose["yaw"] = self.quaternion_to_yaw(msg.pose.pose.orientation)
@@ -96,6 +107,8 @@ class YahboomX3Controller(Node):
     def amcl_callback(self, msg: PoseWithCovarianceStamped):
         """AMCL定位回调，更新高精度姿态"""
         with self.lock:
+            # 新增日志：验证回调是否执行
+            self.get_logger().debug(f"收到AMCL数据：x={msg.pose.pose.position.x:.2f}, y={msg.pose.pose.position.y:.2f}")
             self.current_amcl_pose["x"] = msg.pose.pose.position.x
             self.current_amcl_pose["y"] = msg.pose.pose.position.y
             self.current_amcl_pose["yaw"] = self.quaternion_to_yaw(msg.pose.pose.orientation)
@@ -106,7 +119,7 @@ class YahboomX3Controller(Node):
             if use_amcl:
                 return self.current_amcl_pose.copy()
             else:
-                return self.current_odom_pose.copy()  # 修复之前的笔误（odom_pose→current_odom_pose）
+                return self.current_odom_pose.copy()
 
     def send_goal_by_topic(self, x, y, yaw=0.0, frame_id="map"):
         """通过/goal_pose话题发送导航目标（备用方式）"""
@@ -225,7 +238,8 @@ def main(args=None):
     
     # 3. 运行节点（阻塞直到手动退出）
     try:
-        rclpy.spin(x3_controller)
+        while rclpy.ok():
+            time.sleep(0.1)  # 保持主线程存活
     except KeyboardInterrupt:
         x3_controller.get_logger().info("用户中断，退出程序")
         x3_controller.cancel_navigation()

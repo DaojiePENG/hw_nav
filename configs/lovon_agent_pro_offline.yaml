@@ -1,0 +1,55 @@
+# 先执行：python scripts/download_lovon_pro_models.py
+# 本配置在断网状态下只读取仓库本地的模型文件。
+
+runtime:
+  device: auto
+  half_precision: true
+
+detector:
+  model: models/lovon_pro/yolo11n.pt
+  confidence: 0.30
+  iou: 0.55
+  image_size: 640
+  use_bytetrack: true
+  tracker: bytetrack.yaml
+
+matcher:
+  model: models/lovon_pro/siglip2-base-patch16-224
+  revision: null
+  local_files_only: true
+  crop_padding: 0.05
+  prompt_template_zh: 一张{description}的全身照片
+  prompt_template_other: a full-body photo of {description}
+
+selector:
+  acquire_score_threshold: 0.10
+  acquire_margin: 0.015
+  acquire_semantic_weight: 0.75
+  acquire_spatial_weight: 0.15
+  acquire_detector_weight: 0.10
+  max_missed_frames: 12
+  min_iou: 0.08
+  min_appearance_similarity: 0.72
+  min_association_score: 0.30
+  track_id_weight: 0.30
+  iou_weight: 0.25
+  appearance_weight: 0.35
+  semantic_weight: 0.10
+  embedding_momentum: 0.85
+
+controller:
+  backend: bbox
+  default_speed: 0.25
+  max_linear_speed: 0.40
+  stop_bbox_width: 0.62
+  slow_down_bbox_width: 0.38
+  center_deadband: 0.06
+  turn_in_place_error: 0.30
+  yaw_gain: 1.8
+  max_yaw_speed: 1.0
+  angular_sign: -1.0
+  search_angular_speed: 0.0
+  wh_scale_factor: 1.0
+  velocity_scale: 1.0
+  l2mm_tokenizer_path: null
+  l2mm_model_path: null

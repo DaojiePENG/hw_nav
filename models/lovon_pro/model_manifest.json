@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "detector": {
+    "name": "yolo11n.pt",
+    "url": "https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11n.pt",
+    "sha256": "0ebbc80d4a7680d14987a577cd21342b65ecfd94632bd9a8da63ae6417644ee1",
+    "size_bytes": 5613764
+  },
+  "matcher": {
+    "repo_id": "google/siglip2-base-patch16-224",
+    "revision": "75de2d55ec2d0b4efc50b3e9ad70dba96a7b2fa2",
+    "local_dir": "siglip2-base-patch16-224"
+  }
+}
+

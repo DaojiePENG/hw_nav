@@ -1,0 +1,9 @@
+# 该示例只覆盖默认配置中的控制器部分。
+# 将路径改为本机已有的旧 LOVON 私有资产，然后以此文件为基础复制完整配置。
+
+controller:
+  backend: l2mm
+  velocity_scale: 1.0
+  wh_scale_factor: 1.0
+  l2mm_tokenizer_path: lovon/models_cxn_025/tokenizer_language2motion_n1000000
+  l2mm_model_path: lovon/models_cxn_025/model_language2motion_n1000000_d256_h8_l4_f1024_msl64_hold_success_cxn025_beta10_no_hold

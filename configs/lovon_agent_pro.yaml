@@ -1,0 +1,69 @@
+# LovonAgentPro 默认配置。所有速度单位均为 m/s，角速度为 rad/s。
+# 初次真机运行前请先使用 dry-run 校准 selector 和 controller 阈值。
+
+runtime:
+  # auto / cpu / cuda / cuda:0
+  device: auto
+  half_precision: true
+
+detector:
+  # scripts/download_lovon_pro_models.py 下载后可改为：
+  # models/lovon_pro/yolo11n.pt
+  model: yolo11n.pt
+  confidence: 0.30
+  iou: 0.55
+  image_size: 640
+  use_bytetrack: true
+  tracker: bytetrack.yaml
+
+matcher:
+  # 可填写 Hugging Face 模型 ID 或离线目录。
+  # 离线部署建议改为 models/lovon_pro/siglip2-base-patch16-224
+  model: google/siglip2-base-patch16-224
+  revision: 75de2d55ec2d0b4efc50b3e9ad70dba96a7b2fa2
+  local_files_only: false
+  crop_padding: 0.05
+  prompt_template_zh: 一张{description}的全身照片
+  prompt_template_other: a full-body photo of {description}
+
+selector:
+  # 第一次锁定要求绝对图文匹配分数达到阈值。
+  acquire_score_threshold: 0.10
+  # 多人分数过近时拒绝启动，避免误跟；设为 0 可关闭。
+  acquire_margin: 0.015
+  acquire_semantic_weight: 0.75
+  acquire_spatial_weight: 0.15
+  acquire_detector_weight: 0.10
+  # 这里的“帧”是执行完整推理的帧，不是摄像头原始帧。
+  max_missed_frames: 12
+  min_iou: 0.08
+  min_appearance_similarity: 0.72
+  min_association_score: 0.30
+  track_id_weight: 0.30
+  iou_weight: 0.25
+  appearance_weight: 0.35
+  semantic_weight: 0.10
+  embedding_momentum: 0.85
+
+controller:
+  # bbox 为完全开源、可复现的几何控制器；l2mm 复用旧私有权重。
+  backend: bbox
+  default_speed: 0.25
+  max_linear_speed: 0.40
+  # 人物框宽达到画面宽度的 62% 时停车，38% 起逐渐减速。
+  stop_bbox_width: 0.62
+  slow_down_bbox_width: 0.38
+  center_deadband: 0.06
+  turn_in_place_error: 0.30
+  yaw_gain: 1.8
+  max_yaw_speed: 1.0
+  # 图像右侧目标通常需要负角速度；若底盘方向相反，改成 1.0。
+  angular_sign: -1.0
+  # 丢失目标默认原地停车。确认环境安全后才建议设置非零搜索角速度。
+  search_angular_speed: 0.0
+  wh_scale_factor: 1.0
+  velocity_scale: 1.0
+
+  # backend: l2mm 时取消注释并填写旧模型路径：
+  l2mm_tokenizer_path: null
+  l2mm_model_path: null

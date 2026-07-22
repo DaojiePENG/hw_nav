@@ -1,0 +1,13 @@
+# Install PyTorch first with scripts/create_lovon_pro_env.sh.
+# These versions are pinned so x86 CPU/CUDA hosts reproduce the tested stack.
+ultralytics==8.3.169
+lap==0.5.12
+transformers==4.53.3
+huggingface-hub==0.33.4
+safetensors==0.5.3
+sentencepiece==0.2.0
+opencv-python==4.11.0.86
+numpy==1.26.4
+Pillow==11.3.0
+PyYAML==6.0.2
+pytest==8.4.1

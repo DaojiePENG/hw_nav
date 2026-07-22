@@ -2,10 +2,15 @@
 # 本配置在断网状态下只读取仓库本地的模型文件。
 
 runtime:
+  backend: torch
   device: auto
   half_precision: true
+  async_perception: false
+  control_hz: 5.0
+  max_target_age_sec: 0.40
 
 detector:
+  backend: ultralytics
   model: models/lovon_pro/yolo11n.pt
   confidence: 0.30
   iou: 0.55
@@ -14,12 +19,18 @@ detector:
   tracker: bytetrack.yaml
 
 matcher:
+  backend: siglip
   model: models/lovon_pro/siglip2-base-patch16-224
   revision: null
   local_files_only: true
   crop_padding: 0.05
   prompt_template_zh: 一张{description}的全身照片
   prompt_template_other: a full-body photo of {description}
+
+scheduling:
+  matcher_policy: always
+  search_interval_sec: 0.0
+  refresh_interval_sec: 0.0
 
 selector:
   acquire_score_threshold: 0.10

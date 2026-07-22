@@ -18,6 +18,7 @@ from typing import Any, Optional, Tuple
 import cv2
 
 from lovon.lovon_agent_pro import LovonAgentPro
+from lovon.realtime_runtime import AsyncLovonRuntime, ControlTick, FixedRateControlPublisher
 
 
 LOGGER = logging.getLogger("lovon_pro_control")
@@ -36,6 +37,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--drive", action="store_true", help="实际向 Rosmaster 下发速度；缺省仅打印")
     parser.add_argument("--serial-port", help="Rosmaster 串口，例如 /dev/ttyUSB1；留空使用库默认值")
     parser.add_argument("--interval-frames", type=int, default=1, help="每隔多少帧执行一次完整推理")
+    parser.add_argument(
+        "--runtime-mode",
+        choices=("auto", "sync", "async"),
+        default="auto",
+        help="auto 按配置选择；RK3588 应使用 async",
+    )
+    parser.add_argument("--control-hz", type=float, help="异步模式控制指令频率，留空读取配置")
+    parser.add_argument("--max-target-age", type=float, help="bbox 超过该秒数未更新就停车，留空读取配置")
     parser.add_argument("--no-show", action="store_true", help="无 GUI/SSH 环境中禁用窗口")
     parser.add_argument("--output", type=Path, help="可选：保存带标注的视频")
     parser.add_argument("--max-frames", type=int, default=0, help="0 表示持续运行，正数用于烟雾测试")
@@ -149,6 +158,24 @@ def main() -> int:
     LOGGER.info("目标指令：%s", instruction)
     LOGGER.info("加载配置：%s", args.config)
     agent = LovonAgentPro.from_config_file(args.config)
+    runtime_config = agent.config["runtime"]
+    async_mode = (
+        bool(runtime_config.get("async_perception", False))
+        if args.runtime_mode == "auto"
+        else args.runtime_mode == "async"
+    )
+    control_hz = float(
+        args.control_hz if args.control_hz is not None else runtime_config.get("control_hz", 5.0)
+    )
+    max_target_age = float(
+        args.max_target_age
+        if args.max_target_age is not None
+        else runtime_config.get("max_target_age_sec", 0.40)
+    )
+    if control_hz <= 0.0:
+        raise ValueError("control_hz 必须大于 0")
+    if max_target_age <= 0.0:
+        raise ValueError("max_target_age 必须大于 0")
     frame_source: FrameSource = RosmasterCameraSource() if args.rosmaster_camera else OpenCVSource(args.source)
     motion_sink: MotionSink = RosmasterMotionSink(args.serial_port) if args.drive else DryRunMotionSink()
     LOGGER.warning("电机输出：%s", "已启用" if args.drive else "关闭（dry-run）")
@@ -163,8 +190,44 @@ def main() -> int:
     signal.signal(signal.SIGTERM, request_shutdown)
     frame_index = 0
     processed_frames = 0
+    last_submitted_sequence: Optional[int] = None
     writer: Optional[cv2.VideoWriter] = None
     annotated = None
+    async_runtime: Optional[AsyncLovonRuntime] = None
+    control_publisher: Optional[FixedRateControlPublisher] = None
+    if async_mode:
+        async_runtime = AsyncLovonRuntime(
+            agent,
+            max_target_age_sec=max_target_age,
+            annotate=bool(args.output or not args.no_show),
+        )
+
+        def log_control_tick(tick: ControlTick) -> None:
+            state = tick.snapshot.state or {}
+            LOGGER.info(
+                "control=%s search=%s selector=%s id=%s matcher=%s motion=%s infer=%.1fms age=%s",
+                tick.reason,
+                state.get("search_state_in", "not_ready"),
+                state.get("selector_reason", "not_ready"),
+                state.get("target_track_id"),
+                state.get("matcher_reason", "not_ready"),
+                [round(value, 3) for value in tick.motion],
+                tick.snapshot.inference_ms,
+                (
+                    "n/a"
+                    if tick.snapshot.frame_timestamp is None
+                    else f"{max(0.0, tick.timestamp - tick.snapshot.frame_timestamp) * 1000.0:.1f}ms"
+                ),
+            )
+
+        control_publisher = FixedRateControlPublisher(
+            async_runtime,
+            motion_sink.command,
+            frequency_hz=control_hz,
+            on_tick=log_control_tick,
+        )
+        control_publisher.start()
+        LOGGER.info("异步感知已启用：control_hz=%.2f stale_timeout=%.3fs", control_hz, max_target_age)
 
     try:
         while running:
@@ -173,32 +236,44 @@ def main() -> int:
                 LOGGER.info("视频源结束或暂时不可用")
                 break
             if frame_index % args.interval_frames == 0:
-                started = time.perf_counter()
-                try:
-                    state, motion = agent.run(frame, user_instruction=instruction)
-                    motion_sink.command(motion)
-                    annotated = agent.annotate(frame)
-                    elapsed_ms = (time.perf_counter() - started) * 1000.0
-                    LOGGER.info(
-                        "state=%s search=%s reason=%s id=%s match=%.3f candidates=%d motion=%s %.1fms",
-                        state["mission_state_in"],
-                        state["search_state_in"],
-                        state["selector_reason"],
-                        state["target_track_id"],
-                        state["target_match_score"],
-                        state["candidate_count"],
-                        [round(value, 3) for value in motion],
-                        elapsed_ms,
-                    )
-                except Exception:
-                    motion_sink.stop()
-                    LOGGER.exception("推理失败，已发送停车指令")
-                    if args.drive:
-                        raise
-                    annotated = frame.copy()
+                if async_runtime is not None:
+                    last_submitted_sequence = async_runtime.submit_frame(frame, instruction)
+                else:
+                    started = time.perf_counter()
+                    try:
+                        state, motion = agent.run(frame, user_instruction=instruction)
+                        motion_sink.command(motion)
+                        annotated = agent.annotate(frame)
+                        elapsed_ms = (time.perf_counter() - started) * 1000.0
+                        LOGGER.info(
+                            "state=%s search=%s reason=%s id=%s match=%.3f candidates=%d motion=%s %.1fms",
+                            state["mission_state_in"],
+                            state["search_state_in"],
+                            state["selector_reason"],
+                            state["target_track_id"],
+                            state["target_match_score"],
+                            state["candidate_count"],
+                            [round(value, 3) for value in motion],
+                            elapsed_ms,
+                        )
+                    except Exception:
+                        motion_sink.stop()
+                        LOGGER.exception("推理失败，已发送停车指令")
+                        if args.drive:
+                            raise
+                        annotated = frame.copy()
                 processed_frames += 1
             elif annotated is None:
                 annotated = frame
+
+            if async_runtime is not None:
+                if control_publisher is not None:
+                    control_publisher.raise_if_failed()
+                snapshot = async_runtime.get_snapshot()
+                if snapshot.annotated is not None:
+                    annotated = snapshot.annotated
+                elif annotated is None:
+                    annotated = frame
 
             if args.output:
                 if writer is None:
@@ -211,12 +286,26 @@ def main() -> int:
             frame_index += 1
             if args.max_frames > 0 and processed_frames >= args.max_frames:
                 break
+        # A finite video or --max-frames smoke test must not clear its final
+        # pending frame before the worker has produced a result.
+        if async_runtime is not None and last_submitted_sequence is not None:
+            try:
+                async_runtime.wait_until_processed(last_submitted_sequence, timeout=30.0)
+            except TimeoutError:
+                LOGGER.warning("等待最后一帧异步推理超时；退出时保持停车")
+            if control_publisher is not None:
+                control_publisher.raise_if_failed()
     finally:
+        if control_publisher is not None:
+            control_publisher.close()
         motion_sink.stop()
+        if async_runtime is not None:
+            async_runtime.close()
         frame_source.close()
         if writer is not None:
             writer.release()
-        cv2.destroyAllWindows()
+        if not args.no_show:
+            cv2.destroyAllWindows()
         LOGGER.info("已停车并释放资源")
     return 0
 

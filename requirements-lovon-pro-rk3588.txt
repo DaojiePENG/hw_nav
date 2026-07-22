@@ -1,0 +1,9 @@
+# Board-side dependencies.  Install the matching rknn_toolkit_lite2 wheel
+# separately with scripts/create_lovon_rk3588_env.sh board.
+numpy==1.26.4
+opencv-python-headless==4.11.0.86
+transformers==4.53.3
+tokenizers==0.21.2
+huggingface-hub==0.33.4
+PyYAML==6.0.2
+pytest==8.4.1

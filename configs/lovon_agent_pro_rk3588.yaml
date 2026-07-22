@@ -1,0 +1,73 @@
+# RK3588 production profile.  Models must first be created with
+# scripts/prepare_lovon_rk3588_models.sh on an x86_64 conversion computer.
+
+runtime:
+  backend: rknn
+  device: cpu
+  half_precision: false
+  async_perception: true
+  control_hz: 5.0
+  # A completed inference is still rejected if the source frame is too old.
+  max_target_age_sec: 0.40
+
+detector:
+  backend: rknn_yolo11
+  model: models/lovon_pro_rk3588/yolo11n_i8.rknn
+  confidence: 0.30
+  iou: 0.55
+  image_size: 640
+  core_mask: auto
+  tracker_iou_threshold: 0.20
+  tracker_max_missed: 15
+
+matcher:
+  backend: rknn_clip
+  image_model: models/lovon_pro_rk3588/clip_images_fp16.rknn
+  text_model: models/lovon_pro_rk3588/clip_text_fp16.rknn
+  tokenizer: models/lovon_pro_rk3588/clip-tokenizer
+  sequence_length: 20
+  crop_padding: 0.05
+  core_mask: auto
+  prompt_template_zh: 一张{description}的全身照片
+  prompt_template_other: a full-body photo of {description}
+
+scheduling:
+  # CLIP only runs for acquisition, a missing target ID, or periodic checking.
+  matcher_policy: event_driven
+  search_interval_sec: 0.50
+  refresh_interval_sec: 2.00
+
+selector:
+  # RKNN CLIP exposes shifted cosine similarity: (cosine + 1) / 2.  These two
+  # values are safe starting points, not universal calibration constants.
+  acquire_score_threshold: 0.60
+  acquire_margin: 0.015
+  acquire_semantic_weight: 0.75
+  acquire_spatial_weight: 0.15
+  acquire_detector_weight: 0.10
+  max_missed_frames: 12
+  min_iou: 0.08
+  min_appearance_similarity: 0.72
+  min_association_score: 0.30
+  track_id_weight: 0.30
+  iou_weight: 0.25
+  appearance_weight: 0.35
+  semantic_weight: 0.10
+  embedding_momentum: 0.85
+
+controller:
+  backend: bbox
+  default_speed: 0.20
+  max_linear_speed: 0.30
+  stop_bbox_width: 0.62
+  slow_down_bbox_width: 0.38
+  center_deadband: 0.06
+  turn_in_place_error: 0.30
+  yaw_gain: 1.8
+  max_yaw_speed: 1.0
+  angular_sign: -1.0
+  search_angular_speed: 0.0
+  wh_scale_factor: 1.0
+  velocity_scale: 1.0
+  l2mm_tokenizer_path: null
+  l2mm_model_path: null

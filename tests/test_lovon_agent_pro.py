@@ -60,6 +60,9 @@ def test_builds_auxiliary_english_prompt_for_common_chinese_attributes():
     assert prompts[1] == "a full-body photo of leftmost man wearing black T-shirt and blue jeans"
     assert prompts[2] == "a full-body photo of man wearing black T-shirt and blue jeans"
 
+    translated = translate_common_zh_attributes("长头发、穿褐色上衣的女生")
+    assert translated == "woman long hair wearing brown shirt"
+
 
 def test_applies_explicit_spatial_hint_without_using_crop_content():
     people = [

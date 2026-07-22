@@ -18,9 +18,10 @@ import logging
 import math
 import os
 import re
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, MutableMapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Mapping, MutableMapping, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -31,10 +32,15 @@ BBox = Tuple[float, float, float, float]
 
 DEFAULT_CONFIG: Dict[str, Any] = {
     "runtime": {
+        "backend": "torch",
         "device": "auto",
         "half_precision": True,
+        "async_perception": False,
+        "control_hz": 5.0,
+        "max_target_age_sec": 0.40,
     },
     "detector": {
+        "backend": "ultralytics",
         "model": "yolo11n.pt",
         "confidence": 0.30,
         "iou": 0.55,
@@ -43,12 +49,21 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "tracker": "bytetrack.yaml",
     },
     "matcher": {
+        "backend": "siglip",
         "model": "google/siglip2-base-patch16-224",
         "revision": "75de2d55ec2d0b4efc50b3e9ad70dba96a7b2fa2",
         "local_files_only": False,
         "crop_padding": 0.05,
         "prompt_template_zh": "一张{description}的全身照片",
         "prompt_template_other": "a full-body photo of {description}",
+    },
+    "scheduling": {
+        # ``always`` preserves the original x86 behavior.  RK3588 uses
+        # ``event_driven`` so the expensive vision-language model is not on
+        # the control loop's critical path.
+        "matcher_policy": "always",
+        "search_interval_sec": 0.0,
+        "refresh_interval_sec": 0.0,
     },
     "selector": {
         "acquire_score_threshold": 0.10,
@@ -192,8 +207,8 @@ def translate_common_zh_attributes(description: str) -> Optional[str]:
         (r"黑人(女人|女性)$", "Black woman"),
         (r"亚洲(男人|男性)$", "Asian man"),
         (r"亚洲(女人|女性)$", "Asian woman"),
-        (r"(男人|男性)$", "man"),
-        (r"(女人|女性)$", "woman"),
+        (r"(男人|男性|男生|男孩|男士)$", "man"),
+        (r"(女人|女性|女生|女孩|女士)$", "woman"),
         (r"人$", "person"),
     )
     for pattern, translated in subjects:
@@ -231,6 +246,8 @@ def translate_common_zh_attributes(description: str) -> Optional[str]:
         ("碎花", "floral"),
         ("花纹", "patterned"),
         ("条纹", "striped"),
+        ("长头发", "long hair"),
+        ("短头发", "short hair"),
         ("长发", "long hair"),
         ("短发", "short hair"),
         ("金发", "blonde hair"),
@@ -245,6 +262,9 @@ def translate_common_zh_attributes(description: str) -> Optional[str]:
         ("橙色", "orange"),
         ("紫色", "purple"),
         ("粉色", "pink"),
+        ("棕褐色", "brown"),
+        ("咖啡色", "brown"),
+        ("褐色", "brown"),
         ("棕色", "brown"),
         ("穿着", "wearing"),
         ("穿", "wearing"),
@@ -846,6 +866,7 @@ class LovonAgentPro:
         matcher: Any = None,
         selector: Optional[StableTargetSelector] = None,
         controller: Any = None,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self.config = copy.deepcopy(DEFAULT_CONFIG)
         if config:
@@ -853,28 +874,27 @@ class LovonAgentPro:
         runtime = self.config["runtime"]
         detector_config = self.config["detector"]
         matcher_config = self.config["matcher"]
+        scheduling_config = self.config["scheduling"]
         selector_config = self.config["selector"]
         controller_config = self.config["controller"]
 
-        self.detector = detector or YoloPersonDetector(
-            model_path=detector_config["model"],
-            confidence=detector_config["confidence"],
-            iou=detector_config["iou"],
-            image_size=detector_config["image_size"],
-            use_bytetrack=detector_config["use_bytetrack"],
-            tracker=detector_config["tracker"],
-            device=runtime["device"],
-        )
-        self.matcher = matcher or SiglipPersonMatcher(
-            model_name_or_path=matcher_config["model"],
-            revision=matcher_config.get("revision"),
-            device=runtime["device"],
-            half_precision=runtime["half_precision"],
-            local_files_only=matcher_config["local_files_only"],
-            crop_padding=matcher_config["crop_padding"],
-        )
+        self.detector = detector or self._build_detector(detector_config, runtime)
+        self.matcher = matcher or self._build_matcher(matcher_config, runtime)
         self.selector = selector or StableTargetSelector(**selector_config)
         self.controller = controller or self._build_controller(controller_config)
+        self.clock = clock
+        self.matcher_policy = str(scheduling_config.get("matcher_policy", "always")).lower()
+        if self.matcher_policy not in {"always", "event_driven"}:
+            raise ValueError("scheduling.matcher_policy 只能是 always 或 event_driven")
+        self.search_interval_sec = float(scheduling_config.get("search_interval_sec", 0.0))
+        self.refresh_interval_sec = float(scheduling_config.get("refresh_interval_sec", 0.0))
+        if self.search_interval_sec < 0.0 or self.refresh_interval_sec < 0.0:
+            raise ValueError("scheduling 时间间隔不能为负数")
+        self.last_match_time = -math.inf
+        self.matcher_ran = False
+        self.matcher_reason = "not_started"
+        self.matcher_candidate_count = 0
+        self._feature_cache: Dict[int, Tuple[float, np.ndarray, float]] = {}
         self.wh_scale_factor = float(controller_config.get("wh_scale_factor", 1.0))
         self.target_instruction: Optional[str] = None
         self.target_description = ""
@@ -887,6 +907,58 @@ class LovonAgentPro:
     @classmethod
     def from_config_file(cls, path: os.PathLike[str] | str, **dependencies: Any) -> "LovonAgentPro":
         return cls(config=load_pro_config(path), **dependencies)
+
+    @staticmethod
+    def _build_detector(config: Mapping[str, Any], runtime: Mapping[str, Any]) -> Any:
+        backend = str(config.get("backend", "ultralytics")).lower()
+        if backend == "ultralytics":
+            return YoloPersonDetector(
+                model_path=config["model"],
+                confidence=config["confidence"],
+                iou=config["iou"],
+                image_size=config["image_size"],
+                use_bytetrack=config["use_bytetrack"],
+                tracker=config["tracker"],
+                device=runtime["device"],
+            )
+        if backend == "rknn_yolo11":
+            from lovon.rknn_backend import RknnYolo11PersonDetector
+
+            return RknnYolo11PersonDetector(
+                model_path=str(config["model"]),
+                confidence=float(config["confidence"]),
+                iou=float(config["iou"]),
+                image_size=int(config["image_size"]),
+                core_mask=str(config.get("core_mask", "auto")),
+                tracker_iou_threshold=float(config.get("tracker_iou_threshold", 0.20)),
+                tracker_max_missed=int(config.get("tracker_max_missed", 15)),
+            )
+        raise ValueError(f"未知 detector.backend：{backend!r}")
+
+    @staticmethod
+    def _build_matcher(config: Mapping[str, Any], runtime: Mapping[str, Any]) -> Any:
+        backend = str(config.get("backend", "siglip")).lower()
+        if backend == "siglip":
+            return SiglipPersonMatcher(
+                model_name_or_path=config["model"],
+                revision=config.get("revision"),
+                device=runtime["device"],
+                half_precision=runtime["half_precision"],
+                local_files_only=config["local_files_only"],
+                crop_padding=config["crop_padding"],
+            )
+        if backend == "rknn_clip":
+            from lovon.rknn_backend import RknnClipPersonMatcher
+
+            return RknnClipPersonMatcher(
+                image_model_path=str(config["image_model"]),
+                text_model_path=str(config["text_model"]),
+                tokenizer_path=str(config["tokenizer"]),
+                crop_padding=float(config.get("crop_padding", 0.05)),
+                core_mask=str(config.get("core_mask", "auto")),
+                sequence_length=int(config.get("sequence_length", 20)),
+            )
+        raise ValueError(f"未知 matcher.backend：{backend!r}")
 
     @staticmethod
     def _build_controller(config: Mapping[str, Any]) -> Any:
@@ -920,6 +992,12 @@ class LovonAgentPro:
             "candidate_count": 0,
             "selector_reason": self.selector.reason if hasattr(self, "selector") else "not_initialized",
             "missed_frames": self.selector.missed_frames if hasattr(self, "selector") else 0,
+            "matcher_ran": self.matcher_ran if hasattr(self, "matcher_ran") else False,
+            "matcher_reason": self.matcher_reason if hasattr(self, "matcher_reason") else "not_initialized",
+            "matcher_candidate_count": (
+                self.matcher_candidate_count if hasattr(self, "matcher_candidate_count") else 0
+            ),
+            "matcher_age_sec": None,
         }
 
     def set_target_instruction(self, instruction: str) -> None:
@@ -938,7 +1016,60 @@ class LovonAgentPro:
             ),
         )
         self.selector.reset()
+        self._feature_cache.clear()
+        self.last_match_time = -math.inf
+        self.matcher_reason = "instruction_changed"
+        self.matcher_candidate_count = 0
         self.state = self._empty_state()
+
+    def _should_run_matcher(
+        self,
+        detections: Sequence[PersonDetection],
+        now: float,
+        instruction_changed: bool,
+    ) -> Tuple[bool, str]:
+        if not detections:
+            return False, "no_candidates"
+        if self.matcher_policy == "always":
+            return True, "always"
+        if instruction_changed or not self.selector.ever_acquired:
+            due = now - self.last_match_time >= self.search_interval_sec
+            return due, "acquire_due" if due else "search_throttled"
+        target_id = self.selector.target_track_id
+        target_id_visible = target_id is not None and any(item.track_id == target_id for item in detections)
+        if not target_id_visible:
+            due = now - self.last_match_time >= self.search_interval_sec
+            return due, "target_id_missing" if due else "search_throttled"
+        due = self.refresh_interval_sec > 0.0 and now - self.last_match_time >= self.refresh_interval_sec
+        return due, "periodic_refresh" if due else "tracking_cache"
+
+    def _restore_cached_features(self, detections: Sequence[PersonDetection]) -> None:
+        for detection in detections:
+            if detection.track_id is None:
+                continue
+            cached = self._feature_cache.get(detection.track_id)
+            if cached is None:
+                continue
+            detection.semantic_score = cached[0]
+            detection.appearance = cached[1].copy()
+
+    def _update_feature_cache(self, detections: Sequence[PersonDetection], now: float) -> None:
+        for detection in detections:
+            if detection.track_id is None or detection.appearance is None:
+                continue
+            self._feature_cache[detection.track_id] = (
+                float(detection.semantic_score),
+                _unit_vector(detection.appearance),
+                now,
+            )
+        if len(self._feature_cache) > 256:
+            newest = sorted(self._feature_cache.items(), key=lambda item: item[1][2], reverse=True)[:128]
+            self._feature_cache = dict(newest)
+
+    def _matcher_age(self) -> Optional[float]:
+        if not math.isfinite(self.last_match_time):
+            return None
+        return max(0.0, self.clock() - self.last_match_time)
 
     def _update_state(self, image: np.ndarray, selected: Optional[PersonDetection], count: int) -> None:
         if selected is None:
@@ -951,6 +1082,10 @@ class LovonAgentPro:
                     "search_state_in": self.selector.status,
                     "selector_reason": self.selector.reason,
                     "missed_frames": self.selector.missed_frames,
+                    "matcher_ran": self.matcher_ran,
+                    "matcher_reason": self.matcher_reason,
+                    "matcher_candidate_count": self.matcher_candidate_count,
+                    "matcher_age_sec": self._matcher_age(),
                 }
             )
             return
@@ -970,6 +1105,10 @@ class LovonAgentPro:
                 "candidate_count": count,
                 "selector_reason": self.selector.reason,
                 "missed_frames": self.selector.missed_frames,
+                "matcher_ran": self.matcher_ran,
+                "matcher_reason": self.matcher_reason,
+                "matcher_candidate_count": self.matcher_candidate_count,
+                "matcher_age_sec": self._matcher_age(),
             }
         )
 
@@ -992,16 +1131,63 @@ class LovonAgentPro:
         instruction = user_instruction or mission_instruction_1 or self.target_instruction
         if instruction is None:
             raise ValueError("首次 run 必须提供 user_instruction（例如：跟随穿红色上衣、背黑色包的人）")
+        previous_instruction = self.target_instruction
         self.set_target_instruction(instruction)
+        instruction_changed = previous_instruction != self.target_instruction
+        now = self.clock()
         detections = self.detector.detect(image)
-        scores, embeddings = self.matcher.score(image, detections, self.target_prompt)
-        if len(scores) != len(detections) or len(embeddings) != len(detections):
-            raise RuntimeError("matcher 输出数量与人物检测数量不一致")
-        for detection, score, embedding in zip(detections, scores, embeddings):
-            detection.semantic_score = float(score)
-            detection.appearance = _unit_vector(np.asarray(embedding, dtype=np.float32))
+        self._restore_cached_features(detections)
+        self.matcher_ran, self.matcher_reason = self._should_run_matcher(
+            detections,
+            now,
+            instruction_changed,
+        )
+        self.matcher_candidate_count = 0
+        periodic_rejected = False
+        if self.matcher_ran:
+            match_candidates = list(detections)
+            if self.matcher_reason == "periodic_refresh" and self.selector.target_track_id is not None:
+                match_candidates = [
+                    item for item in detections if item.track_id == self.selector.target_track_id
+                ]
+            self.matcher_candidate_count = len(match_candidates)
+            scores, embeddings = self.matcher.score(image, match_candidates, self.target_prompt)
+            if len(scores) != len(match_candidates) or len(embeddings) != len(match_candidates):
+                raise RuntimeError("matcher 输出数量与人物检测数量不一致")
+            self.last_match_time = now
+            normalized_embeddings = [
+                _unit_vector(np.asarray(embedding, dtype=np.float32)) for embedding in embeddings
+            ]
+            if self.matcher_reason == "periodic_refresh" and match_candidates:
+                semantic_ok = float(scores[0]) >= self.selector.acquire_score_threshold
+                appearance_similarity = _cosine_similarity(
+                    self.selector.target_embedding,
+                    normalized_embeddings[0],
+                )
+                appearance_ok = (
+                    self.selector.target_embedding is None
+                    or appearance_similarity >= self.selector.min_appearance_similarity
+                )
+                if not semantic_ok or not appearance_ok:
+                    # Do not let a possibly switched tracker ID update the
+                    # identity template.  Stop this frame and force an
+                    # all-candidate semantic reacquisition on the next frame.
+                    periodic_rejected = True
+                    self.matcher_reason = (
+                        "periodic_rejected_semantic" if not semantic_ok else "periodic_rejected_appearance"
+                    )
+                    self.selector.target_track_id = None
+                    self.selector.missed_frames = self.selector.max_missed_frames + 1
+                    self.selector.status = "searching"
+                    self.selector.reason = "periodic_verification_failed"
+                    self.last_match_time = -math.inf
+            if not periodic_rejected:
+                for detection, score, embedding in zip(match_candidates, scores, normalized_embeddings):
+                    detection.semantic_score = float(score)
+                    detection.appearance = embedding
+                self._update_feature_cache(match_candidates, now)
         apply_spatial_hint(detections, image.shape, self.target_description)
-        selected = self.selector.select(detections)
+        selected = None if periodic_rejected else self.selector.select(detections)
         self.last_candidates = list(detections)
         self.last_selected = selected
         self._update_state(image, selected, len(detections))

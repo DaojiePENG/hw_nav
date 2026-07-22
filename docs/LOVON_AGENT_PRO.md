@@ -1,5 +1,9 @@
 # LovonAgentPro：按自然语言特征跟随特定人物
 
+> RK3588 的 RKNN 后端、异步 5 Hz 调度、模型转换和真板验收请直接阅读
+> [LOVON_AGENT_PRO_RK3588.md](LOVON_AGENT_PRO_RK3588.md)。本文件前半部分的 SigLIP2/PyTorch 流程主要
+> 面向 x86 CUDA/CPU；不能原样作为 RK3588 实时部署方案。
+
 ## 1. 交付结论
 
 `LovonAgentPro` 已作为一条独立管线加入仓库。它不会修改或替换原有的
@@ -130,6 +134,10 @@ Vz = clip(angular_sign × yaw_gain × e, ±max_yaw_speed)
 | `scripts/evaluate_lovon_pro_image.py` | 多人图、多条指令评估和 JSON 报告 |
 | `tests/test_lovon_agent_pro.py` | 不依赖模型权重的管线测试 |
 | `models/lovon_pro/model_manifest.json` | 权重 URL、revision、hash 清单 |
+| `lovon/rknn_backend.py` | RK3588 YOLO11/CLIP RKNNLite 后端和轻量 tracker |
+| `lovon/realtime_runtime.py` | 最新帧异步感知与陈旧 bbox 停车 |
+| `configs/lovon_agent_pro_rk3588.yaml` | RK3588 5 Hz 生产配置 |
+| `docs/LOVON_AGENT_PRO_RK3588.md` | 从模型转换到真板 benchmark 的完整手册 |
 
 ## 5. 从 git clone 完整复现（x86 Linux）
 

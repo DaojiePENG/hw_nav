@@ -2,11 +2,16 @@
 # 初次真机运行前请先使用 dry-run 校准 selector 和 controller 阈值。
 
 runtime:
+  backend: torch
   # auto / cpu / cuda / cuda:0
   device: auto
   half_precision: true
+  async_perception: false
+  control_hz: 5.0
+  max_target_age_sec: 0.40
 
 detector:
+  backend: ultralytics
   # scripts/download_lovon_pro_models.py 下载后可改为：
   # models/lovon_pro/yolo11n.pt
   model: yolo11n.pt
@@ -17,6 +22,7 @@ detector:
   tracker: bytetrack.yaml
 
 matcher:
+  backend: siglip
   # 可填写 Hugging Face 模型 ID 或离线目录。
   # 离线部署建议改为 models/lovon_pro/siglip2-base-patch16-224
   model: google/siglip2-base-patch16-224
@@ -25,6 +31,12 @@ matcher:
   crop_padding: 0.05
   prompt_template_zh: 一张{description}的全身照片
   prompt_template_other: a full-body photo of {description}
+
+scheduling:
+  # x86 参考实现保持逐帧语义匹配；RK3588 配置改用 event_driven。
+  matcher_policy: always
+  search_interval_sec: 0.0
+  refresh_interval_sec: 0.0
 
 selector:
   # 第一次锁定要求绝对图文匹配分数达到阈值。
